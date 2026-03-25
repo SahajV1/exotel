@@ -1,4 +1,4 @@
-name: Exotel Automation
+name: exotel
 
 on:
   schedule:

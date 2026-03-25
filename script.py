@@ -4,7 +4,6 @@ import csv
 import io
 import time
 import pandas as pd
-from datetime import datetime, timedelta
 from urllib.parse import quote
 import gspread
 from google.oauth2.service_account import Credentials
@@ -18,17 +17,6 @@ EXOTEL_ACCOUNT_SID = os.getenv("EXOTEL_ACCOUNT_SID")
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
 
 # ==============================
-# 📅 GET YESTERDAY DATE RANGE
-# ==============================
-
-def get_yesterday():
-    yesterday = datetime.now() - timedelta(days=1)
-    date_str = yesterday.strftime('%Y-%m-%d')
-    start = f"{date_str} 00:00:00"
-    end = f"{date_str} 23:59:59"
-    return start, end, date_str
-
-# ==============================
 # 🍪 PARSE COOKIES
 # ==============================
 
@@ -40,6 +28,15 @@ def parse_cookies(cookie_string):
             key, _, val = part.partition('=')
             cookies[key.strip()] = val.strip()
     return cookies
+
+# ==============================
+# 📅 FULL MARCH RANGE (IMPORTANT)
+# ==============================
+
+def get_march_range():
+    start = "2026-03-01 00:00:00"
+    end = "2026-03-24 23:59:59"
+    return start, end
 
 # ==============================
 # 📥 DOWNLOAD EXOTEL REPORT
@@ -68,7 +65,7 @@ def download_exotel_report(start, end):
 
     cookies = parse_cookies(EXOTEL_COOKIES)
 
-    print(f'📡 Fetching report: {start} → {end}')
+    print(f'📡 Fetching FULL MARCH data: {start} → {end}')
     r1 = requests.get(api_url, headers=headers, cookies=cookies, timeout=60)
 
     if r1.status_code != 200:
@@ -82,7 +79,6 @@ def download_exotel_report(start, end):
 
     print('✅ Got S3 URL')
 
-    # Step 2: Download CSV
     r2 = requests.get(s3_url, timeout=60)
 
     if r2.status_code != 200:
@@ -101,11 +97,9 @@ def download_exotel_report(start, end):
 # ==============================
 
 def upload_to_sheets(df):
-    # Write credentials.json from secret
     with open("credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS)
 
-    # ✅ FIXED: Add scopes
     SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -122,15 +116,16 @@ def upload_to_sheets(df):
 
     data = [df.columns.values.tolist()] + df.values.tolist()
 
+    # 🔥 Overwrite (since this is initial full load)
     sheet.update("A1", data)
 
-    print("✅ Data uploaded to Google Sheets")
+    print("✅ FULL MARCH data uploaded")
 
 # ==============================
 # 🚀 MAIN EXECUTION
 # ==============================
 
 if __name__ == "__main__":
-    start, end, date = get_yesterday()
+    start, end = get_march_range()
     df = download_exotel_report(start, end)
     upload_to_sheets(df)

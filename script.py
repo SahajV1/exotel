@@ -107,7 +107,7 @@ def upload_to_sheets(df):
     creds = Credentials.from_service_account_file("credentials.json")
     client = gspread.authorize(creds)
 
-    sheet = client.open("YOUR_SHEET_NAME").sheet1
+    sheet = client.open("Exotel Dashboard").sheet1
 
     data = [df.columns.values.tolist()] + df.values.tolist()
 

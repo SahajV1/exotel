@@ -4,12 +4,13 @@ import csv
 import io
 import time
 import pandas as pd
+from datetime import datetime, timedelta
 from urllib.parse import quote
 import gspread
 from google.oauth2.service_account import Credentials
 
 # ==============================
-# 🔐 LOAD SECRETS FROM GITHUB
+# 🔐 LOAD SECRETS
 # ==============================
 
 EXOTEL_COOKIES = os.getenv("EXOTEL_COOKIES")
@@ -30,7 +31,7 @@ def parse_cookies(cookie_string):
     return cookies
 
 # ==============================
-# 📥 DOWNLOAD EXOTEL REPORT
+# 📥 DOWNLOAD REPORT
 # ==============================
 
 def download_exotel_report(start, end):
@@ -56,7 +57,7 @@ def download_exotel_report(start, end):
 
     cookies = parse_cookies(EXOTEL_COOKIES)
 
-    print(f'📡 Fetching: {start} → {end}')
+    print(f'📡 Fetching: {start}')
     r1 = requests.get(api_url, headers=headers, cookies=cookies, timeout=60)
 
     if r1.status_code != 200:
@@ -66,25 +67,25 @@ def download_exotel_report(start, end):
 
     s3_url = data.get('report', {}).get('url', '')
     if not s3_url:
-        raise Exception('❌ No S3 URL found')
+        raise Exception(f'❌ No S3 URL for {start}')
 
     print('✅ Got S3 URL')
 
     r2 = requests.get(s3_url, timeout=60)
 
     if r2.status_code != 200:
-        raise Exception(f'❌ Step 2 failed: {r2.status_code}')
+        raise Exception(f'❌ Step 2 failed')
 
     content = r2.content.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(content))
     rows = list(reader)
 
-    print(f'✅ {len(rows)} records downloaded')
+    print(f'✅ {len(rows)} records')
 
     return pd.DataFrame(rows)
 
 # ==============================
-# 📊 GOOGLE SHEETS UPLOAD
+# 📊 UPLOAD TO SHEETS
 # ==============================
 
 def upload_to_sheets(df):
@@ -96,29 +97,23 @@ def upload_to_sheets(df):
         "https://www.googleapis.com/auth/drive"
     ]
 
-    creds = Credentials.from_service_account_file(
-        "credentials.json",
-        scopes=SCOPES
-    )
-
+    creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
     client = gspread.authorize(creds)
+
     sheet = client.open("Exotel Dashboard").sheet1
 
     data = [df.columns.values.tolist()] + df.values.tolist()
 
-    # overwrite for testing
     sheet.update("A1", data)
 
-    print("✅ Data uploaded to Google Sheets")
+    print("✅ FULL MARCH uploaded")
 
 # ==============================
-# 🚀 MAIN (TEST FOR 23 MARCH)
+# 🚀 MAIN (FULL MARCH)
 # ==============================
-
-from datetime import datetime, timedelta
 
 if __name__ == "__main__":
-    start_date = datetime(2026, 3, 23)
+    start_date = datetime(2026, 3, 1)
     end_date = datetime(2026, 3, 24)
 
     all_data = []
@@ -130,7 +125,7 @@ if __name__ == "__main__":
         start = f"{date_str} 00:00:00"
         end = f"{date_str} 23:59:59"
 
-        print(f"\n🔄 Fetching: {start}")
+        print(f"\n🔄 Processing {date_str}")
 
         try:
             df = download_exotel_report(start, end)
@@ -142,6 +137,6 @@ if __name__ == "__main__":
 
     final_df = pd.concat(all_data, ignore_index=True)
 
-    print(f"\n✅ Total records fetched: {len(final_df)}")
+    print(f"\n✅ TOTAL RECORDS: {len(final_df)}")
 
     upload_to_sheets(final_df)

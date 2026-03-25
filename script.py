@@ -30,15 +30,6 @@ def parse_cookies(cookie_string):
     return cookies
 
 # ==============================
-# 📅 FULL MARCH RANGE (IMPORTANT)
-# ==============================
-
-def get_march_range():
-    start = "2026-03-01 00:00:00"
-    end = "2026-03-24 23:59:59"
-    return start, end
-
-# ==============================
 # 📥 DOWNLOAD EXOTEL REPORT
 # ==============================
 
@@ -65,7 +56,7 @@ def download_exotel_report(start, end):
 
     cookies = parse_cookies(EXOTEL_COOKIES)
 
-    print(f'📡 Fetching FULL MARCH data: {start} → {end}')
+    print(f'📡 Fetching: {start} → {end}')
     r1 = requests.get(api_url, headers=headers, cookies=cookies, timeout=60)
 
     if r1.status_code != 200:
@@ -75,7 +66,7 @@ def download_exotel_report(start, end):
 
     s3_url = data.get('report', {}).get('url', '')
     if not s3_url:
-        raise Exception('❌ No S3 URL found')
+        raise Exception(f'❌ No S3 URL for range {start} → {end}')
 
     print('✅ Got S3 URL')
 
@@ -111,21 +102,43 @@ def upload_to_sheets(df):
     )
 
     client = gspread.authorize(creds)
-
     sheet = client.open("Exotel Dashboard").sheet1
 
     data = [df.columns.values.tolist()] + df.values.tolist()
 
-    # 🔥 Overwrite (since this is initial full load)
+    # 🔥 overwrite (initial load)
     sheet.update("A1", data)
 
     print("✅ FULL MARCH data uploaded")
+
+# ==============================
+# 📅 MARCH CHUNKS
+# ==============================
+
+def get_march_ranges():
+    return [
+        ("2026-03-01 00:00:00", "2026-03-07 23:59:59"),
+        ("2026-03-08 00:00:00", "2026-03-14 23:59:59"),
+        ("2026-03-15 00:00:00", "2026-03-21 23:59:59"),
+        ("2026-03-22 00:00:00", "2026-03-24 23:59:59"),
+    ]
 
 # ==============================
 # 🚀 MAIN EXECUTION
 # ==============================
 
 if __name__ == "__main__":
-    start, end = get_march_range()
-    df = download_exotel_report(start, end)
-    upload_to_sheets(df)
+    all_data = []
+
+    ranges = get_march_ranges()
+
+    for start, end in ranges:
+        print(f"\n🔄 Processing range: {start} → {end}")
+        df = download_exotel_report(start, end)
+        all_data.append(df)
+
+    final_df = pd.concat(all_data, ignore_index=True)
+
+    print(f"\n✅ Total records collected: {len(final_df)}")
+
+    upload_to_sheets(final_df)

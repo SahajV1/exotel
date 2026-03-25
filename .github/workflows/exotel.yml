@@ -2,8 +2,8 @@ name: Exotel Automation
 
 on:
   schedule:
-    - cron: "0 * * * *"   # runs every hour
-  workflow_dispatch:      # allows manual run
+    - cron: "30 4 * * *"   # 10:00 AM IST
+  workflow_dispatch:
 
 jobs:
   run-script:

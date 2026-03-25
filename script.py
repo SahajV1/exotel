@@ -31,6 +31,17 @@ def parse_cookies(cookie_string):
     return cookies
 
 # ==============================
+# 📅 GET YESTERDAY
+# ==============================
+
+def get_yesterday():
+    yesterday = datetime.now() - timedelta(days=1)
+    date_str = yesterday.strftime('%Y-%m-%d')
+    start = f"{date_str} 00:00:00"
+    end = f"{date_str} 23:59:59"
+    return start, end, date_str
+
+# ==============================
 # 📥 DOWNLOAD REPORT
 # ==============================
 
@@ -61,13 +72,13 @@ def download_exotel_report(start, end):
     r1 = requests.get(api_url, headers=headers, cookies=cookies, timeout=60)
 
     if r1.status_code != 200:
-        raise Exception(f'❌ Step 1 failed: {r1.status_code}')
+        raise Exception(f'❌ Step 1 failed')
 
     data = r1.json()
 
     s3_url = data.get('report', {}).get('url', '')
     if not s3_url:
-        raise Exception(f'❌ No S3 URL for {start}')
+        raise Exception(f'❌ No S3 URL')
 
     print('✅ Got S3 URL')
 
@@ -85,7 +96,7 @@ def download_exotel_report(start, end):
     return pd.DataFrame(rows)
 
 # ==============================
-# 📊 UPLOAD TO SHEETS
+# 📊 UPLOAD (APPEND)
 # ==============================
 
 def upload_to_sheets(df):
@@ -104,39 +115,25 @@ def upload_to_sheets(df):
 
     data = [df.columns.values.tolist()] + df.values.tolist()
 
-    sheet.update("A1", data)
+    existing = sheet.get_all_values()
 
-    print("✅ FULL MARCH uploaded")
+    if len(existing) == 0:
+        # First time
+        sheet.update("A1", data)
+    else:
+        # Append
+        next_row = len(existing) + 1
+        sheet.update(f"A{next_row}", data[1:])  # skip header
+
+    print("✅ Data appended")
 
 # ==============================
-# 🚀 MAIN (FULL MARCH)
+# 🚀 MAIN
 # ==============================
 
 if __name__ == "__main__":
-    start_date = datetime(2026, 3, 1)
-    end_date = datetime(2026, 3, 24)
+    start, end, date = get_yesterday()
 
-    all_data = []
+    df = download_exotel_report(start, end)
 
-    current = start_date
-
-    while current <= end_date:
-        date_str = current.strftime('%Y-%m-%d')
-        start = f"{date_str} 00:00:00"
-        end = f"{date_str} 23:59:59"
-
-        print(f"\n🔄 Processing {date_str}")
-
-        try:
-            df = download_exotel_report(start, end)
-            all_data.append(df)
-        except Exception as e:
-            print(f"⚠️ Skipped {date_str}: {e}")
-
-        current += timedelta(days=1)
-
-    final_df = pd.concat(all_data, ignore_index=True)
-
-    print(f"\n✅ TOTAL RECORDS: {len(final_df)}")
-
-    upload_to_sheets(final_df)
+    upload_to_sheets(df)

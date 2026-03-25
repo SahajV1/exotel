@@ -115,14 +115,33 @@ def upload_to_sheets(df):
 # 🚀 MAIN (TEST FOR 23 MARCH)
 # ==============================
 
+from datetime import datetime, timedelta
+
 if __name__ == "__main__":
-    start = "2026-03-23 00:00:00"
-    end = "2026-03-23 23:59:59"
+    start_date = datetime(2026, 3, 23)
+    end_date = datetime(2026, 3, 24)
 
-    print(f"\n🔄 Testing single day: {start}")
+    all_data = []
 
-    df = download_exotel_report(start, end)
+    current = start_date
 
-    print(f"\n✅ Records fetched: {len(df)}")
+    while current <= end_date:
+        date_str = current.strftime('%Y-%m-%d')
+        start = f"{date_str} 00:00:00"
+        end = f"{date_str} 23:59:59"
 
-    upload_to_sheets(df)
+        print(f"\n🔄 Fetching: {start}")
+
+        try:
+            df = download_exotel_report(start, end)
+            all_data.append(df)
+        except Exception as e:
+            print(f"⚠️ Skipped {date_str}: {e}")
+
+        current += timedelta(days=1)
+
+    final_df = pd.concat(all_data, ignore_index=True)
+
+    print(f"\n✅ Total records fetched: {len(final_df)}")
+
+    upload_to_sheets(final_df)

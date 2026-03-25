@@ -97,14 +97,25 @@ def download_exotel_report(start, end):
     return pd.DataFrame(rows)
 
 # ==============================
-# 📊 GOOGLE SHEETS SETUP
+# 📊 GOOGLE SHEETS UPLOAD
 # ==============================
 
 def upload_to_sheets(df):
+    # Write credentials.json from secret
     with open("credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS)
 
-    creds = Credentials.from_service_account_file("credentials.json")
+    # ✅ FIXED: Add scopes
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds = Credentials.from_service_account_file(
+        "credentials.json",
+        scopes=SCOPES
+    )
+
     client = gspread.authorize(creds)
 
     sheet = client.open("Exotel Dashboard").sheet1

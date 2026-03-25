@@ -66,7 +66,7 @@ def download_exotel_report(start, end):
 
     s3_url = data.get('report', {}).get('url', '')
     if not s3_url:
-        raise Exception(f'❌ No S3 URL for range {start} → {end}')
+        raise Exception('❌ No S3 URL found')
 
     print('✅ Got S3 URL')
 
@@ -106,39 +106,23 @@ def upload_to_sheets(df):
 
     data = [df.columns.values.tolist()] + df.values.tolist()
 
-    # 🔥 overwrite (initial load)
+    # overwrite for testing
     sheet.update("A1", data)
 
-    print("✅ FULL MARCH data uploaded")
+    print("✅ Data uploaded to Google Sheets")
 
 # ==============================
-# 📅 MARCH CHUNKS
-# ==============================
-
-def get_march_ranges():
-    return [
-        ("2026-03-01 00:00:00", "2026-03-07 23:59:59"),
-        ("2026-03-08 00:00:00", "2026-03-14 23:59:59"),
-        ("2026-03-15 00:00:00", "2026-03-21 23:59:59"),
-        ("2026-03-22 00:00:00", "2026-03-24 23:59:59"),
-    ]
-
-# ==============================
-# 🚀 MAIN EXECUTION
+# 🚀 MAIN (TEST FOR 23 MARCH)
 # ==============================
 
 if __name__ == "__main__":
-    all_data = []
+    start = "2026-03-23 00:00:00"
+    end = "2026-03-23 23:59:59"
 
-    ranges = get_march_ranges()
+    print(f"\n🔄 Testing single day: {start}")
 
-    for start, end in ranges:
-        print(f"\n🔄 Processing range: {start} → {end}")
-        df = download_exotel_report(start, end)
-        all_data.append(df)
+    df = download_exotel_report(start, end)
 
-    final_df = pd.concat(all_data, ignore_index=True)
+    print(f"\n✅ Records fetched: {len(df)}")
 
-    print(f"\n✅ Total records collected: {len(final_df)}")
-
-    upload_to_sheets(final_df)
+    upload_to_sheets(df)

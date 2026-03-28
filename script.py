@@ -132,7 +132,9 @@ def upload_to_sheets(df):
 # ==============================
 
 if __name__ == "__main__":
-    start, end, date = get_yesterday()
+    # 🔒 FIXED DATE: 26 March 2026
+    start = "2026-03-26 00:00:00"
+    end = "2026-03-26 23:59:59"
 
     df = download_exotel_report(start, end)
 

@@ -31,12 +31,15 @@ def parse_cookies(cookie_string):
     return cookies
 
 # ==============================
-# 📅 FIXED DATE (26 MARCH)
+# 📅 YESTERDAY DATE
 # ==============================
 
-def get_fixed_date():
-    start = "2026-03-26 00:00:00"
-    end = "2026-03-26 23:59:59"
+def get_yesterday_date():
+    yesterday = datetime.now() - timedelta(days=1)
+
+    start = yesterday.strftime("%Y-%m-%d 00:00:00")
+    end = yesterday.strftime("%Y-%m-%d 23:59:59")
+
     return start, end
 
 # ==============================
@@ -67,16 +70,17 @@ def download_exotel_report(start, end):
     cookies = parse_cookies(EXOTEL_COOKIES)
 
     print(f'📡 Fetching: {start}')
+
     r1 = requests.get(api_url, headers=headers, cookies=cookies, timeout=60)
 
     if r1.status_code != 200:
-        raise Exception('❌ Step 1 failed')
+        raise Exception(f'❌ Step 1 failed: {r1.text}')
 
     data = r1.json()
     s3_url = data.get('report', {}).get('url', '')
 
     if not s3_url:
-        raise Exception('❌ No S3 URL')
+        raise Exception('❌ No S3 URL received')
 
     print('✅ Got S3 URL')
 
@@ -89,41 +93,16 @@ def download_exotel_report(start, end):
     reader = csv.DictReader(io.StringIO(content))
     rows = list(reader)
 
-    print(f'✅ {len(rows)} records')
+    print(f'✅ {len(rows)} records fetched')
 
     return pd.DataFrame(rows)
 
 # ==============================
-# 🧹 CLEAN OLD DATA (30 DAYS)
-# ==============================
-
-def keep_last_30_days(sheet, df_new):
-    existing = sheet.get_all_values()
-
-    if len(existing) == 0:
-        return df_new
-
-    df_old = pd.DataFrame(existing[1:], columns=existing[0])
-
-    # 🔴 CHANGE THIS COLUMN NAME IF NEEDED
-    date_col = "Start Time"
-
-    df_old[date_col] = pd.to_datetime(df_old[date_col], errors='coerce')
-    df_new[date_col] = pd.to_datetime(df_new[date_col], errors='coerce')
-
-    combined = pd.concat([df_old, df_new])
-
-    cutoff = datetime.now() - timedelta(days=30)
-
-    filtered = combined[combined[date_col] >= cutoff]
-
-    return filtered
-
-# ==============================
-# 📊 UPLOAD CLEAN DATA
+# 📊 UPLOAD TO GOOGLE SHEETS
 # ==============================
 
 def upload_to_sheets(df_new):
+    # 🔑 Write credentials
     with open("credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS)
 
@@ -137,32 +116,46 @@ def upload_to_sheets(df_new):
 
     sheet = client.open("Exotel Dashboard").sheet1
 
-    # 🧹 Keep only last 30 days
-    df_final = keep_last_30_days(sheet, df_new)
+    # 🧹 Remove duplicates in new data
+    if "Id" in df_new.columns:
+        df_new = df_new.drop_duplicates(subset=["Id"])
 
-    data = [df_final.columns.values.tolist()] + df_final.values.tolist()
+    existing_data = sheet.get_all_values()
 
-    # 🔥 Resize sheet
+    # 🟢 FIRST RUN
+    if len(existing_data) == 0:
+        print("🆕 First time upload")
+        sheet.update([df_new.columns.values.tolist()] + df_new.values.tolist())
+        return
+
+    # 🟡 APPEND MODE
+    df_old = pd.DataFrame(existing_data[1:], columns=existing_data[0])
+
+    if "Id" in df_old.columns:
+        df_old = df_old.drop_duplicates(subset=["Id"])
+
+    # 🔥 Combine & remove duplicates
+    combined = pd.concat([df_old, df_new], ignore_index=True)
+
+    if "Id" in combined.columns:
+        combined = combined.drop_duplicates(subset=["Id"])
+
+    # 📤 Clear & upload clean data
     sheet.clear()
+    sheet.update([combined.columns.values.tolist()] + combined.values.tolist())
 
-    required_rows = len(data)
-    current_rows = sheet.row_count
-
-    if required_rows > current_rows:
-        sheet.add_rows(required_rows - current_rows)
-
-    # ✅ Correct update format
-    sheet.update(values=data, range_name="A1")
-
-    print("✅ Sheet updated (last 30 days only)")
+    print("✅ Sheet updated (No duplicates, appended safely)")
 
 # ==============================
 # 🚀 MAIN
 # ==============================
 
 if __name__ == "__main__":
-    start, end = get_fixed_date()
+    start, end = get_yesterday_date()
 
     df = download_exotel_report(start, end)
 
-    upload_to_sheets(df)
+    if df.empty:
+        print("⚠️ No data fetched")
+    else:
+        upload_to_sheets(df)

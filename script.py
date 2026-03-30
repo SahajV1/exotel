@@ -3,6 +3,7 @@ import requests
 import csv
 import io
 import time
+import pytz
 import pandas as pd
 from urllib.parse import quote
 import gspread
@@ -34,8 +35,14 @@ def parse_cookies(cookie_string):
 # ==============================
 
 def get_date():
-    return "2026-03-27 00:00:00", "2026-03-27 23:59:59"
+    india = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(india)
+    yesterday = now - timedelta(days=1)
 
+    start = yesterday.strftime("%Y-%m-%d 00:00:00")
+    end = yesterday.strftime("%Y-%m-%d 23:59:59")
+
+    return start, end
 # ==============================
 # 📥 DOWNLOAD REPORT
 # ==============================

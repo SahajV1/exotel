@@ -32,7 +32,7 @@ def parse_cookies(cookie_string):
     return cookies
 
 # ==============================
-# 📅 FIXED DATE (27 MARCH)
+# 📅 YESTERDAY DATE (IST)
 # ==============================
 
 def get_date():
@@ -44,6 +44,7 @@ def get_date():
     end = yesterday.strftime("%Y-%m-%d 23:59:59")
 
     return start, end
+
 # ==============================
 # 📥 DOWNLOAD REPORT
 # ==============================
@@ -75,8 +76,6 @@ def download_exotel_report(start, end):
 
     response = requests.get(api_url, headers=headers, cookies=cookies)
 
-    print("🔍 DEBUG RESPONSE:", response.text)
-
     if response.status_code != 200:
         raise Exception(f"❌ API failed: {response.text}")
 
@@ -84,14 +83,11 @@ def download_exotel_report(start, end):
     s3_url = data.get("report", {}).get("url")
 
     if not s3_url:
-        print("❌ No S3 URL — possible reasons:")
-        print("1. No data on this date")
-        print("2. Cookies expired")
+        print("⚠️ No S3 URL (no data or cookies expired)")
         return pd.DataFrame()
 
     print("✅ Got S3 URL")
 
-    # 🔽 Download CSV
     csv_response = requests.get(s3_url)
 
     if csv_response.status_code != 200:
@@ -106,7 +102,7 @@ def download_exotel_report(start, end):
     return pd.DataFrame(rows)
 
 # ==============================
-# 📊 UPLOAD TO GOOGLE SHEETS
+# 📊 UPLOAD TO GOOGLE SHEETS (APPEND)
 # ==============================
 
 def upload_to_sheets(df):
@@ -115,26 +111,34 @@ def upload_to_sheets(df):
         "https://www.googleapis.com/auth/drive"
     ]
 
-    # 🔥 Load creds from GitHub secret
     creds_dict = json.loads(GOOGLE_CREDENTIALS)
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
     client = gspread.authorize(creds)
-
     sheet = client.open("Exotel Dashboard").sheet1
 
-    print("📤 Uploading to Google Sheets...")
+    print("📤 Uploading (append mode)...")
 
-    # Clear old data
-    sheet.clear()
+    existing_data = sheet.get_all_values()
 
-    # Prepare data
-    data = [df.columns.values.tolist()] + df.values.tolist()
+    # 🟢 FIRST RUN
+    if len(existing_data) == 0:
+        data = [df.columns.values.tolist()] + df.values.tolist()
+        sheet.update(values=data, range_name="A1")
+        print("✅ First upload complete")
+        return
 
-    # Upload
-    sheet.update(values=data, range_name="A1")
+    # 🟡 OPTIONAL: REMOVE DUPLICATES (if Id column exists)
+    if "Id" in df.columns:
+        existing_ids = set(row[0] for row in existing_data[1:])
+        df = df[~df["Id"].isin(existing_ids)]
 
-    print("✅ Sheet updated successfully")
+    # 🔥 APPEND DATA
+    if not df.empty:
+        sheet.append_rows(df.values.tolist())
+        print(f"✅ Appended {len(df)} new rows")
+    else:
+        print("⚠️ No new data to append")
 
 # ==============================
 # 🚀 MAIN
@@ -146,7 +150,6 @@ if __name__ == "__main__":
     df = download_exotel_report(start, end)
 
     if df.empty:
-        print("⚠️ No data fetched for 27 March")
+        print("⚠️ No data fetched for yesterday")
     else:
-        print("🔥 SUCCESS — pushing to sheet")
         upload_to_sheets(df)

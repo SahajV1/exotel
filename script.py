@@ -5,13 +5,20 @@ import io
 import time
 import pandas as pd
 from urllib.parse import quote
-
-# 🔑 ENV VARIABLES
-EXOTEL_COOKIES = os.getenv("EXOTEL_COOKIES")
-EXOTEL_ACCOUNT_SID = os.getenv("EXOTEL_ACCOUNT_SID")
+import gspread
+from google.oauth2.service_account import Credentials
+import json
 
 # ==============================
-# 🍪 COOKIE PARSER
+# 🔐 LOAD SECRETS
+# ==============================
+
+EXOTEL_COOKIES = os.getenv("EXOTEL_COOKIES")
+EXOTEL_ACCOUNT_SID = os.getenv("EXOTEL_ACCOUNT_SID")
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
+
+# ==============================
+# 🍪 PARSE COOKIES
 # ==============================
 
 def parse_cookies(cookie_string):
@@ -23,7 +30,7 @@ def parse_cookies(cookie_string):
     return cookies
 
 # ==============================
-# 📅 FIXED DATE → 27 MARCH
+# 📅 FIXED DATE (27 MARCH)
 # ==============================
 
 def get_date():
@@ -60,14 +67,12 @@ def download_exotel_report(start, end):
 
     response = requests.get(api_url, headers=headers, cookies=cookies)
 
-    print("🔍 DEBUG RESPONSE:", response.text)  # VERY IMPORTANT
+    print("🔍 DEBUG RESPONSE:", response.text)
 
     if response.status_code != 200:
-        raise Exception("❌ API failed")
+        raise Exception(f"❌ API failed: {response.text}")
 
     data = response.json()
-
-    # 🔥 GET S3 URL
     s3_url = data.get("report", {}).get("url")
 
     if not s3_url:
@@ -78,8 +83,11 @@ def download_exotel_report(start, end):
 
     print("✅ Got S3 URL")
 
-    # 🔽 DOWNLOAD CSV
+    # 🔽 Download CSV
     csv_response = requests.get(s3_url)
+
+    if csv_response.status_code != 200:
+        raise Exception("❌ CSV download failed")
 
     content = csv_response.content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(content))
@@ -88,6 +96,37 @@ def download_exotel_report(start, end):
     print(f"✅ Rows fetched: {len(rows)}")
 
     return pd.DataFrame(rows)
+
+# ==============================
+# 📊 UPLOAD TO GOOGLE SHEETS
+# ==============================
+
+def upload_to_sheets(df):
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    # 🔥 Load creds from GitHub secret
+    creds_dict = json.loads(GOOGLE_CREDENTIALS)
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+
+    client = gspread.authorize(creds)
+
+    sheet = client.open("Exotel Dashboard").sheet1
+
+    print("📤 Uploading to Google Sheets...")
+
+    # Clear old data
+    sheet.clear()
+
+    # Prepare data
+    data = [df.columns.values.tolist()] + df.values.tolist()
+
+    # Upload
+    sheet.update(values=data, range_name="A1")
+
+    print("✅ Sheet updated successfully")
 
 # ==============================
 # 🚀 MAIN
@@ -101,5 +140,5 @@ if __name__ == "__main__":
     if df.empty:
         print("⚠️ No data fetched for 27 March")
     else:
-        print("🔥 SUCCESS")
-        print(df.head())
+        print("🔥 SUCCESS — pushing to sheet")
+        upload_to_sheets(df)

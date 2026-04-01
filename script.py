@@ -115,7 +115,7 @@ def upload_to_sheets(df):
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
     client = gspread.authorize(creds)
-    sheet = client.open("Exotel Dashboard").sheet1
+    sheet = client.open("Tickets Dashboard").sheet1
 
     print("📤 Uploading (append mode)...")
 

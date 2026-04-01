@@ -115,7 +115,9 @@ def upload_to_sheets(df):
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
     client = gspread.authorize(creds)
-    sheet = client.open("Tickets Dashboard").sheet1
+
+    # 🔥 Using Sheet ID (reliable)
+    sheet = client.open_by_key("1E4N_qMD-WwV2sW4g8mbi4PgSWHc6juXRwsTVqDbffjg").sheet1
 
     print("📤 Uploading (append mode)...")
 
@@ -128,7 +130,7 @@ def upload_to_sheets(df):
         print("✅ First upload complete")
         return
 
-    # 🟡 OPTIONAL: REMOVE DUPLICATES (if Id column exists)
+    # 🟡 REMOVE DUPLICATES (based on Id column)
     if "Id" in df.columns:
         existing_ids = set(row[0] for row in existing_data[1:])
         df = df[~df["Id"].isin(existing_ids)]
